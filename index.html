@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Vaastu Floor Plan Designer</title>
+
+  <!-- Bootstrap -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet"/>
+
+  <style>
+    body { background:#f8f9fa; }
+    #floorCanvas {
+      border:1px solid #333;
+      max-width:100%;
+      height:auto;         /* responsive display; internal buffer stays 1000x700 */
+      touch-action:none;   /* improves pointer fidelity on touch devices */
+      display:block;
+      margin:0 auto;
+    }
+  </style>
+</head>
+<body>
+  <div class="container my-4">
+
+    <div class="card mb-4">
+      <div class="card-body">
+        <h2 class="card-title mb-3">Floor Plan Settings</h2>
+        <div class="row g-2 align-items-end">
+          <div class="col-6 col-md-3">
+            <label class="form-label">Width (ft)
+              <input type="number" id="outerWidthFeet" class="form-control" placeholder="e.g. 100"/>
+            </label>
+          </div>
+          <div class="col-6 col-md-3">
+            <label class="form-label">Height (ft)
+              <input type="number" id="outerHeightFeet" class="form-control" placeholder="e.g. 80"/>
+            </label>
+          </div>
+          <div class="col-6 col-md-2">
+            <button id="createBoundaryBtn" class="btn btn-primary w-100">Create Plan</button>
+          </div>
+          <div class="col-6 col-md-2">
+            <button id="zoomInBtn" class="btn btn-secondary w-100">Zoom In</button>
+          </div>
+          <div class="col-6 col-md-2">
+            <button id="zoomOutBtn" class="btn btn-secondary w-100">Zoom Out</button>
+          </div>
+
+          <div class="col-12 mt-3"><hr/></div>
+
+          <div class="col-12 col-md-4">
+            <label class="form-label w-100">Rotate Compass
+              <input type="range" id="compassRotation" class="form-range" min="0" max="360" value="0"/>
+            </label>
+          </div>
+          <div class="col-12 col-md-4">
+            <label class="form-label w-100">Compass Size
+              <input type="range" id="compassSize" class="form-range" min="50" max="300" value="120"/>
+            </label>
+          </div>
+          <div class="col-6 col-md-2">
+            <button id="toggleCompassBtn" class="btn btn-outline-info w-100">Hide Compass</button>
+          </div>
+          <div class="col-6 col-md-2">
+            <button id="printBtn" class="btn btn-outline-primary w-100">Print Plan</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card mb-4">
+      <div class="card-body">
+        <h2 class="card-title mb-3">Room Management</h2>
+        <div class="row g-2 align-items-end">
+          <div class="col-6 col-md-3">
+            <label class="form-label">Title
+              <input type="text" id="roomTitle" class="form-control" placeholder="Bedroom"/>
+            </label>
+          </div>
+          <div class="col-6 col-md-3">
+            <label class="form-label">Width (ft)
+              <input type="number" id="widthFeet" class="form-control" placeholder="12"/>
+            </label>
+          </div>
+          <div class="col-6 col-md-3">
+            <label class="form-label">Height (ft)
+              <input type="number" id="heightFeet" class="form-control" placeholder="10"/>
+            </label>
+          </div>
+          <div class="col-6 col-md-3">
+            <button id="addRoomBtn" class="btn btn-primary w-100">Add Room</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card mb-4">
+      <div class="card-body text-center p-0">
+        <canvas id="floorCanvas" width="1000" height="700"></canvas>
+      </div>
+    </div>
+
+    <div id="roomControls" class="card">
+      <div class="card-body" id="roomControlsBody"></div>
+    </div>
+
+    <div class="card mb-4">
+      <div class="card-body">
+        <h2 class="card-title mb-3">Room Management</h2>
+        <div class="row g-2 align-items-end">
+          <div class="col-6 col-md-3">
+            <button id="exportCSVBtn">Export CSV</button>
+          </div>
+          <div class="col-6 col-md-3">
+            <input type="file" id="importCSVInput" accept=".csv" style="display:none;">
+              <button id="importCSVBtn">Import CSV</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+
+      
+  
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      // State
+      const canvas = document.getElementById('floorCanvas');
+      const ctx = canvas.getContext('2d');
+
+      const SCALE = 5; // 1 ft = 5 px (internal map scale)
+      let zoom = 1;    // view zoom (canvas transform)
+      let showCompass = true;
+
+      let outerBoundary = null; // {x,y,width,height} in pixels
+      let rooms = [];           // [{x,y,width,height,title}]
+      let selectedRoomIndex = null;
+      let draggingRoom = null;
+      let dragOffsetX = 0, dragOffsetY = 0;
+
+      // Helpers
+      function getMousePos(evt) {
+        const rect = canvas.getBoundingClientRect();
+        const x = (evt.clientX - rect.left) * (canvas.width / rect.width);
+        const y = (evt.clientY - rect.top)  * (canvas.height / rect.height);
+        return { x: x / zoom, y: y / zoom };
+      }
+      function clearCanvas() {
+        ctx.setTransform(1,0,0,1,0,0);
+        ctx.clearRect(0,0,canvas.width,canvas.height);
+      }
+      function applyZoom() {
+        ctx.setTransform(zoom, 0, 0, zoom, 0, 0);
+      }
+
+      // Drawing
+      function drawBoundary() {
+        if (!outerBoundary) return;
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(outerBoundary.x, outerBoundary.y, outerBoundary.width, outerBoundary.height);
+        ctx.fillStyle = '#000';
+        ctx.font = '16px Arial';
+        ctx.fillText('Floor Plan', outerBoundary.x + 10, outerBoundary.y + 20);
+      }
+      function drawRooms() {
+        rooms.forEach((room, i) => {
+          ctx.fillStyle = (i === selectedRoomIndex) ? '#90ee90' : '#add8e6';
+          ctx.fillRect(room.x, room.y, room.width, room.height);
+          ctx.fillStyle = '#000';
+          ctx.font = '14px Arial';
+          ctx.fillText(room.title, room.x + 6, room.y + 20);
+        });
+      }
+      function drawCompass() {
+        if (!outerBoundary || !showCompass) return;
+
+        const cx = outerBoundary.x + outerBoundary.width / 2;
+        const cy = outerBoundary.y + outerBoundary.height / 2;
+        const radius = +document.getElementById('compassSize').value;
+        const rotDeg = +document.getElementById('compassRotation').value;
+        const rotRad = rotDeg * Math.PI / 180;
+
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(rotRad);
+
+        // Circle
+        ctx.strokeStyle = 'red';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(0, 0, radius, 0, 2 * Math.PI);
+        ctx.stroke();
+
+        // Spokes + labels every 10°
+        for (let deg = 0; deg < 360; deg += 10) {
+          const rad = deg * Math.PI / 180;
+          const x = radius * Math.cos(rad);
+          const y = radius * Math.sin(rad);
+
+          ctx.beginPath();
+          ctx.moveTo(0, 0);
+          ctx.lineTo(x, y);
+          ctx.strokeStyle = (deg % 90 === 0) ? '#333' : '#aaa';
+          ctx.lineWidth = (deg % 90 === 0) ? 2 : 1;
+          ctx.stroke();
+
+          const lx = (radius + 16) * Math.cos(rad);
+          const ly = (radius + 16) * Math.sin(rad);
+          ctx.fillStyle = '#333';
+          ctx.font = '12px Arial';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(deg + '°', lx, ly);
+        }
+
+        ctx.restore();
+      }
+      function redraw() {
+        clearCanvas();
+        applyZoom();
+        drawBoundary();
+        drawRooms();
+        drawCompass(); // draw compass last so it appears on top
+        updateRoomPanel();
+      }
+
+      // UI bindings
+      document.getElementById('createBoundaryBtn').addEventListener('click', () => {
+        const wFt = parseFloat(document.getElementById('outerWidthFeet').value);
+        const hFt = parseFloat(document.getElementById('outerHeightFeet').value);
+        if (isNaN(wFt) || isNaN(hFt) || wFt <= 0 || hFt <= 0) {
+          alert('Enter valid floor dimensions (ft).');
+          return;
+        }
+        const wPx = wFt * SCALE;
+        const hPx = hFt * SCALE;
+        outerBoundary = {
+          x: (canvas.width - wPx) / 2,
+          y: (canvas.height - hPx) / 2,
+          width: wPx,
+          height: hPx
+        };
+        rooms = [];
+        selectedRoomIndex = null;
+        redraw();
+      });
+
+      document.getElementById('zoomInBtn').addEventListener('click', () => { zoom *= 1.1; redraw(); });
+      document.getElementById('zoomOutBtn').addEventListener('click', () => { zoom /= 1.1; redraw(); });
+      document.getElementById('compassRotation').addEventListener('input', redraw);
+      document.getElementById('compassSize').addEventListener('input', redraw);
+
+      document.getElementById('toggleCompassBtn').addEventListener('click', (e) => {
+        showCompass = !showCompass;
+        e.target.textContent = showCompass ? 'Hide Compass' : 'Show Compass';
+        redraw();
+      });
+
+      document.getElementById('addRoomBtn').addEventListener('click', () => {
+        if (!outerBoundary) { alert('Create the floor plan first.'); return; }
+        const title = (document.getElementById('roomTitle').value || '').trim();
+        const wFt = parseFloat(document.getElementById('widthFeet').value);
+        const hFt = parseFloat(document.getElementById('heightFeet').value);
+        if (!title || isNaN(wFt) || isNaN(hFt) || wFt <= 0 || hFt <= 0) {
+          alert('Enter a title and valid room dimensions (ft).');
+          return;
+        }
+        const room = {
+          x: outerBoundary.x + 10,
+          y: outerBoundary.y + 10,
+          width: wFt * SCALE,
+          height: hFt * SCALE,
+          title
+        };
+        // Constrain if larger than boundary
+        room.width = Math.min(room.width, outerBoundary.width - 20);
+        room.height = Math.min(room.height, outerBoundary.height - 20);
+
+        rooms.push(room);
+        selectedRoomIndex = rooms.length - 1;
+        redraw();
+      });
+
+      // Mouse interactions
+      canvas.addEventListener('mousedown', (e) => {
+        const { x: mx, y: my } = getMousePos(e);
+        draggingRoom = null;
+        selectedRoomIndex = null;
+
+        // pick topmost room
+        for (let i = rooms.length - 1; i >= 0; i--) {
+          const r = rooms[i];
+          if (mx > r.x && mx < r.x + r.width && my > r.y && my < r.y + r.height) {
+            draggingRoom = r;
+            selectedRoomIndex = i;
+            dragOffsetX = mx - r.x;
+            dragOffsetY = my - r.y;
+            break;
+          }
+        }
+        redraw();
+      });
+
+      canvas.addEventListener('mousemove', (e) => {
+        if (!draggingRoom) return;
+        const { x: mx, y: my } = getMousePos(e);
+        let nx = mx - dragOffsetX;
+        let ny = my - dragOffsetY;
+
+        // keep inside boundary
+        if (outerBoundary) {
+          nx = Math.max(outerBoundary.x, Math.min(nx, outerBoundary.x + outerBoundary.width - draggingRoom.width));
+          ny = Math.max(outerBoundary.y, Math.min(ny, outerBoundary.y + outerBoundary.height - draggingRoom.height));
+        }
+
+        draggingRoom.x = nx;
+        draggingRoom.y = ny;
+        redraw();
+      });
+
+      canvas.addEventListener('mouseup', () => { draggingRoom = null; });
+      canvas.addEventListener('mouseleave', () => { draggingRoom = null; });
+
+      // Print
+      document.getElementById('printBtn').addEventListener('click', () => {
+        const dataUrl = canvas.toDataURL('image/png');
+        const win = window.open('', '_blank', 'width=800,height=600');
+        win.document.write(`
+          <html><head><title>Print Plan</title>
+          <style>html,body{margin:0;padding:0;} img{max-width:100%;display:block;}</style>
+          </head><body><img src="${dataUrl}"/></body></html>
+        `);
+        win.document.close(); win.focus();
+        win.onload = () => { win.print(); win.close(); };
+      });
+
+      // Room panel
+      function updateRoomPanel() {
+        const body = document.getElementById('roomControlsBody');
+        body.innerHTML = '';
+        if (selectedRoomIndex === null) return;
+        const room = rooms[selectedRoomIndex];
+
+        body.innerHTML = `
+          <h5 class="mb-3">Edit Room</h5>
+          <div class="row g-2 mb-3">
+            <div class="col-12">
+              <label class="form-label">Title
+                <input type="text" id="editTitle" class="form-control" value="${room.title}">
+              </label>
+            </div>
+            <div class="col-6">
+              <label class="form-label">Width (ft)
+                <input type="number" id="editWidth" class="form-control" value="${(room.width / SCALE).toFixed(2)}">
+              </label>
+            </div>
+            <div class="col-6">
+              <label class="form-label">Height (ft)
+                <input type="number" id="editHeight" class="form-control" value="${(room.height / SCALE).toFixed(2)}">
+              </label>
+            </div>
+          </div>
+          <button id="saveRoomBtn" class="btn btn-success me-2">Save</button>
+          <button id="deleteRoomBtn" class="btn btn-danger">Delete</button>
+        `;
+
+        document.getElementById('saveRoomBtn').addEventListener('click', () => {
+          const t = (document.getElementById('editTitle').value || '').trim();
+          const w = parseFloat(document.getElementById('editWidth').value);
+          const h = parseFloat(document.getElementById('editHeight').value);
+          if (!t || isNaN(w) || isNaN(h) || w <= 0 || h <= 0) {
+            alert('Enter valid room details.');
+            return;
+          }
+          room.title = t;
+          room.width = Math.min(w * SCALE, outerBoundary.width - 20);
+          room.height = Math.min(h * SCALE, outerBoundary.height - 20);
+
+          // keep inside
+          if (room.x + room.width > outerBoundary.x + outerBoundary.width) {
+            room.x = outerBoundary.x + outerBoundary.width - room.width;
+          }
+          if (room.y + room.height > outerBoundary.y + outerBoundary.height) {
+            room.y = outerBoundary.y + outerBoundary.height - room.height;
+          }
+          redraw();
+        });
+
+        document.getElementById('deleteRoomBtn').addEventListener('click', () => {
+          rooms.splice(selectedRoomIndex, 1);
+          selectedRoomIndex = null;
+          redraw();
+        });
+      }
+
+      // Initial hint draw
+      redraw();
+
+
+      // --- CSV Export ---
+    document.getElementById('exportCSVBtn').addEventListener('click', () => {
+      if (!outerBoundary) { alert('No floor plan to export'); return; }
+
+      let csv = 'type,title,x,y,width,height\n';
+      csv += `boundary,,${outerBoundary.x},${outerBoundary.y},${outerBoundary.width},${outerBoundary.height}\n`;
+      rooms.forEach(r => {
+        csv += `room,${r.title},${r.x},${r.y},${r.width},${r.height}\n`;
+      });
+
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'floorplan.csv';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    });
+
+    // --- CSV Import ---
+    document.getElementById('importCSVBtn').addEventListener('click', () => {
+      document.getElementById('importCSVInput').click();
+    });
+
+    document.getElementById('importCSVInput').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        const text = evt.target.result;
+        parseCSV(text);
+      };
+      reader.readAsText(file);
+    });
+
+    function parseCSV(text) {
+      const lines = text.trim().split('\n');
+      const header = lines.shift().split(',');
+      const idx = {};
+      header.forEach((h,i) => idx[h.trim()] = i);
+
+      outerBoundary = null;
+      rooms = [];
+
+      lines.forEach(line => {
+        const cols = line.split(',');
+        const type = cols[idx['type']];
+        if (type === 'boundary') {
+          outerBoundary = {
+            x: parseFloat(cols[idx['x']]),
+            y: parseFloat(cols[idx['y']]),
+            width: parseFloat(cols[idx['width']]),
+            height: parseFloat(cols[idx['height']])
+          };
+        } else if (type === 'room') {
+          rooms.push({
+            title: cols[idx['title']],
+            x: parseFloat(cols[idx['x']]),
+            y: parseFloat(cols[idx['y']]),
+            width: parseFloat(cols[idx['width']]),
+            height: parseFloat(cols[idx['height']])
+          });
+        }
+      });
+
+      selectedRoomIndex = null;
+      redraw(); // your existing draw/redraw function
+    }
+    });
+
+    
+
+  </script>
+</body>
+</html>
