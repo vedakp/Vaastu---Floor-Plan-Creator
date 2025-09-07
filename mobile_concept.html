@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Vaastu Floor Plan Designer</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet"/>
+<style>
+  body { background:#f8f9fa; }
+  #floorCanvas {
+    border:1px solid #333;
+    width: 100%;
+    height: auto;
+    touch-action:none;
+    display:block;
+    margin:0 auto;
+  }
+  .sticky-toolbar {
+    position: fixed;
+    bottom: 0;
+    left: 0; right: 0;
+    background: #fff;
+    border-top: 1px solid #ccc;
+    padding: 8px;
+    display: flex;
+    gap: 8px;
+    justify-content: space-around;
+    z-index: 1000;
+  }
+  .sticky-toolbar button {
+    flex: 1;
+  }
+</style>
+</head>
+<body>
+
+<div class="container py-3">
+
+  <!-- Floor Plan Settings -->
+  <div class="card mb-3">
+    <div class="card-body">
+      <h5 class="card-title">Floor Plan Settings</h5>
+      <div class="row g-2">
+        <div class="col-6 col-md-3">
+          <input type="number" id="outerWidthFeet" class="form-control" placeholder="Width (ft)"/>
+        </div>
+        <div class="col-6 col-md-3">
+          <input type="number" id="outerHeightFeet" class="form-control" placeholder="Height (ft)"/>
+        </div>
+        <div class="col-12 col-md-2">
+          <button id="createBoundaryBtn" class="btn btn-primary w-100">Create Plan</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Room Management -->
+  <div class="card mb-3">
+    <div class="card-body">
+      <h5 class="card-title">Room Management</h5>
+      <div class="row g-2">
+        <div class="col-6 col-md-3">
+          <input type="text" id="roomTitle" class="form-control" placeholder="Room title"/>
+        </div>
+        <div class="col-6 col-md-3">
+          <input type="number" id="widthFeet" class="form-control" placeholder="Width (ft)"/>
+        </div>
+        <div class="col-6 col-md-3">
+          <input type="number" id="heightFeet" class="form-control" placeholder="Height (ft)"/>
+        </div>
+        <div class="col-6 col-md-3">
+          <button id="addRoomBtn" class="btn btn-success w-100">Add Room</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Canvas -->
+  <div class="card mb-3">
+    <div class="card-body p-1">
+      <canvas id="floorCanvas" width="1000" height="700"></canvas>
+    </div>
+  </div>
+
+  <!-- Room Edit Panel -->
+  <div id="roomControls" class="card mb-5">
+    <div class="card-body" id="roomControlsBody"></div>
+  </div>
+
+</div>
+
+<!-- Sticky Toolbar for frequent actions -->
+<div class="sticky-toolbar">
+  <button id="zoomInBtn" class="btn btn-secondary">Zoom In</button>
+  <button id="zoomOutBtn" class="btn btn-secondary">Zoom Out</button>
+  <button id="toggleCompassBtn" class="btn btn-outline-info">Hide Compass</button>
+  <button id="printBtn" class="btn btn-outline-primary">Print</button>
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>

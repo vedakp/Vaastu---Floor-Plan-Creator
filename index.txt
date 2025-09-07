@@ -60,7 +60,7 @@
             </label>
           </div>
           <div class="col-6 col-md-2">
-            <button id="toggleCompassBtn" class="btn btn-outline-info w-100">Show Compass</button>
+            <button id="toggleCompassBtn" class="btn btn-outline-info w-100">Hide Compass</button>
           </div>
           <div class="col-6 col-md-2">
             <button id="printBtn" class="btn btn-outline-primary w-100">Print Plan</button>
@@ -130,9 +130,9 @@
       const canvas = document.getElementById('floorCanvas');
       const ctx = canvas.getContext('2d');
 
-      const SCALE = 10; // 1 ft = 5 px (internal map scale)
+      const SCALE = 10; // 1 ft = 10 px (internal map scale)
       let zoom = 1;    // view zoom (canvas transform)
-      let showCompass = false;
+      let showCompass = true;
 
       let outerBoundary = null; // {x,y,width,height} in pixels
       let rooms = [];           // [{x,y,width,height,title}]
@@ -167,21 +167,8 @@
       }
       function drawRooms() {
         rooms.forEach((room, i) => {
-          /*
           ctx.fillStyle = (i === selectedRoomIndex) ? '#90ee90' : '#add8e6';
           ctx.fillRect(room.x, room.y, room.width, room.height);
-          ctx.fillStyle = '#000';
-          ctx.font = '14px Arial';
-          ctx.fillText(room.title, room.x + 6, room.y + 20);
-          */
-          ctx.fillStyle = (i === selectedRoomIndex) ? '#90ee90' : '#add8e6';
-          ctx.fillRect(room.x, room.y, room.width, room.height);
-
-          // Add border
-          ctx.strokeStyle = '#000'; // Border color
-          ctx.lineWidth = 2;        // Border thickness
-          ctx.strokeRect(room.x, room.y, room.width, room.height);
-
           ctx.fillStyle = '#000';
           ctx.font = '14px Arial';
           ctx.fillText(room.title, room.x + 6, room.y + 20);
@@ -483,17 +470,7 @@
       selectedRoomIndex = null;
       redraw(); // your existing draw/redraw function
     }
-
-    window.addEventListener('deviceorientation', function(event) {
-    if (event.alpha !== null) {
-      let heading = 360 - event.alpha; // Adjust for typical compass rotation
-      document.getElementById('compassRotation').value = heading;
-      redraw();
-      // Update a visual element (e.g., rotate an image) based on 'heading'
-      // For example: document.getElementById('compass-arrow').style.transform = `rotate(${heading}deg)`;
-    }
-  });
-  });
+    });
 
     
 
